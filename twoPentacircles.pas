@@ -35,7 +35,6 @@ implementation
 {$R *.dfm}
 
 var
-  pz: TPuz;
 
 procedure initPuzzle(var p: TPuz);
 var
