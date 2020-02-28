@@ -10,6 +10,7 @@ uses
 type
   TForm1 = class(TForm)
     Button1: TButton;
+    Memo1: TMemo;
     procedure Button1Click(Sender: TObject);
   private
     { Private-Deklarationen }
@@ -38,7 +39,7 @@ const
   prunID = 17642862720;
 
 var
-  pruning9: array [0 .. 48620 - 1] of array of UInt8; // 48620 = 18 choose 9
+  pruning9: array [0 .. 48620 - 1] of array of UInt64; // 48620 = 18 choose 9
 
 function c_nk(n, k: Integer): Integer;
 var
@@ -175,7 +176,7 @@ begin
   p.pzo[1] := 0;
 end;
 
-procedure move(var p: TPuz; dir, cID: Integer);
+procedure move(var p: TPuz; cID, dir: Integer);
 var
   i, tmpID, tmpOri: Integer;
 begin
@@ -259,54 +260,63 @@ begin
   end;
 end;
 
-// procedure setPruning(pos, val: Int64);
-/// / 0<=val<4
-// var
-// chunk, offset, offset64, base64: Integer;
-// mask: Int64;
-// begin
-// chunk := pos div 362880;
-// offset := pos mod 362880;
-// base64 := offset div 32; // 32 Positionen pro Int64
-// offset64 := offset mod 32;
-// val := val shl (offset64 * 2);
-// mask := Int64(3);
-// mask := mask shl (offset64 * 2);
-// mask := not mask;
-// pruning9[chunk, base64] := pruning9[chunk, base64] and mask; // zero bits
-// pruning9[chunk, base64] := pruning9[chunk, base64] or val;
-// end;
-
-procedure setPruning(pos: Int64; val: UInt8);
+procedure setPruning(pos, val: Int64);
+/// // / 0<=val<4
+var
+  chunk, offset, offset64, base64: Integer;
+  mask: Int64;
 begin
-  pruning9[pos div 362880, pos mod 362880] := val;
+  chunk := pos div 362880;
+  offset := pos mod 362880;
+  base64 := offset div 32; // 32 Positionen pro Int64
+  offset64 := offset mod 32;
+  val := val shl (offset64 * 2);
+  mask := Int64(3);
+  mask := mask shl (offset64 * 2);
+  mask := not mask;
+  pruning9[chunk, base64] := pruning9[chunk, base64] and mask; // zero bits
+  pruning9[chunk, base64] := pruning9[chunk, base64] or val;
+end;
+
+function getPruning(pos: Int64): Integer;
+var
+  chunk, offset, offset64, base64: Integer;
+  mask, val: Int64;
+begin
+  chunk := pos div 362880;
+  offset := pos mod 362880;
+  base64 := offset div 32; // 32 Positionen pro Int64
+  offset64 := offset mod 32;
+  mask := Int64(3);
+  mask := mask shl (offset64 * 2);
+  val := pruning9[chunk, base64] and mask;
+  result := Integer(val shr (offset64 * 2));
 end;
 
 procedure makePruning;
 var
   fs: TFileStream;
 var
-  i, j, n: Integer;
   pz: TPuz;
   depth: UInt8;
-  done: Int64;
+  done, doneOld, n, i, j: Int64;
 const
   fn = 'pruning9';
 begin
   for i := 0 to 48620 - 1 do
-    Setlength(pruning9[i], 362880); // 362880 = 9!
+    Setlength(pruning9[i], 11340); // 362880 = 9!/4/8
   if FileExists(fn) then
   begin
     fs := TFileStream.Create(fn, fmOpenRead);
     for i := 0 to 48620 - 1 do
-      fs.ReadBuffer(pruning9[i], 362880);
+      fs.ReadBuffer(pruning9[i], 11340);
   end
   else
   begin
     for i := 0 to 48620 - 1 do
     begin
-      for j := 0 to 362880 - 1 do
-        pruning9[i, j] := $FF;
+      for j := 0 to 11340 - 1 do
+        pruning9[i, j] := $FFFFFFFFFFFFFFFF;
     end;
 
     initPuzzle(pz);
@@ -314,6 +324,57 @@ begin
     depth := 0;
     setPruning(n, depth);
     done := 1;
+    doneOld := 0;
+    while done <> doneOld do
+    begin
+      Form1.Memo1.Lines.Add(Inttostr(depth) + ': ' + Inttostr(done));
+      Application.ProcessMessages;
+      doneOld := done;
+      inc(depth);
+      for i := 0 to 17643225600 - 1 do
+      begin
+        if i mod 100000 = 0 then
+          Application.ProcessMessages;
+        if getPruning(i) = (depth-1) mod 3 then // occupied
+        begin
+          set_9tupel_sorted(pz.id, i);
+          move(pz, 0, 0); // rotate disk 0 clockwise
+          n := get_9tupel_sorted(pz.id);
+          if getPruning(n) = 3 then // yet free
+          begin
+            setPruning(n, depth mod 3);
+            inc(done);
+          end;
+          move(pz, 0, 1); // rotate disk 0 anticlockwise
+          move(pz, 0, 1);
+          n := get_9tupel_sorted(pz.id);
+          if getPruning(n) = 3 then // yet free
+          begin
+            setPruning(n, depth mod 3);
+            inc(done);
+          end;
+          move(pz, 0, 0);
+
+          move(pz, 1, 0); // rotate disk 1 clockwise
+          n := get_9tupel_sorted(pz.id);
+          if getPruning(n) = 3 then // yet free
+          begin
+            setPruning(n, depth mod 3);
+            inc(done);
+          end;
+          move(pz, 1, 1); // rotate disk 1 anticlockwise
+          move(pz, 1, 1);
+          n := get_9tupel_sorted(pz.id);
+          if getPruning(n) = 3 then // yet free
+          begin
+            setPruning(n, depth mod 3);
+            inc(done);
+          end;
+        end;
+      end;
+    end;
+    Form1.Memo1.Lines.Add(Inttostr(depth) + ': ' + Inttostr(done));
+
   end;
 end;
 

@@ -11,15 +11,28 @@ object Form1: TForm1
   Font.Name = 'Tahoma'
   Font.Style = []
   OldCreateOrder = False
+  DesignSize = (
+    527
+    336)
   PixelsPerInch = 96
   TextHeight = 13
   object Button1: TButton
-    Left = 216
-    Top = 248
+    Left = 208
+    Top = 303
     Width = 75
     Height = 25
+    Anchors = [akLeft, akBottom]
     Caption = 'Button1'
     TabOrder = 0
     OnClick = Button1Click
+  end
+  object Memo1: TMemo
+    Left = 0
+    Top = 0
+    Width = 529
+    Height = 297
+    Anchors = [akLeft, akTop, akRight]
+    ScrollBars = ssBoth
+    TabOrder = 1
   end
 end
