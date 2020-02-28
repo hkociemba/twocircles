@@ -34,7 +34,133 @@ implementation
 
 {$R *.dfm}
 
+const
+  prunID = 17642862720;
+
 var
+  pruning9: array [0 .. 48620 - 1] of array of UInt8; // 48620 = 18 choose 9
+
+function c_nk(n, k: Integer): Integer;
+var
+  i, j: Integer;
+begin
+  if n < k then
+    exit(0);
+  if k > n div 2 then
+    k := n - k;
+  result := 1;
+  i := n;
+  j := 1;
+  while i <> n - k do
+  begin
+    result := result * i;
+    result := result div j;
+    Dec(i);
+    inc(j);
+  end;
+end;
+
+procedure rot_right(var a: Array of Integer; l, r: Integer);
+// Rotate array arr right between l and r. r is included.
+var
+  tmp, i: Integer;
+begin
+  tmp := a[r];
+  for i := r downto l + 1 do
+    a[i] := a[i - 1];
+  a[l] := tmp
+end;
+
+procedure rot_left(var a: Array of Integer; l, r: Integer);
+// Rotate array arr left between l and r. r is included.
+var
+  tmp, i: Integer;
+begin
+  tmp := a[l];
+  for i := l to r - 1 do
+    a[i] := a[i + 1];
+  a[r] := tmp
+end;
+
+function get_9tupel_sorted(var arr: array of Integer): Int64;
+// 0<=get_9tupel_sorted < 17.643.225.600
+var
+  a, b, x, j, k: Integer;
+  perm9: array [0 .. 8] of Integer;
+begin
+  a := 0;
+  x := 0;
+  // First compute the index a < (18 choose 9) and the permutation array perm9
+  // for the tiles 0..8
+  for j := 17 downto 0 do
+  begin
+    if arr[j] < 9 then
+    begin
+      inc(a, c_nk(17 - j, x + 1));
+      perm9[8 - x] := arr[j];
+      inc(x);
+    end;
+  end;
+
+  // Then compute the index b < 9! for the permutation in perm9
+  b := 0;
+  for j := 8 downto 1 do
+  begin
+    k := 0;
+    while perm9[j] <> j do
+    begin
+      rot_left(perm9, 0, j);
+      inc(k)
+    end;
+    b := (j + 1) * b + k
+  end;
+  result := Int64(362880) * a + b
+end;
+
+procedure set_9tupel_sorted(var arr: array of Integer; idx: Int64);
+var
+  a, b, j, k, x: Integer;
+  perm9: array [0 .. 8] of Integer;
+begin
+  for j := 0 to 8 do
+    perm9[j] := j;
+
+  b := idx mod 362880;
+  a := idx div 362880;
+  for j := 0 to 17 do
+    arr[j] := -1;
+  j := 1; // generate permutation of tiles 0..8
+  while j < 9 do
+  begin
+    k := b mod (j + 1);
+    b := b div (j + 1);
+    while k > 0 do
+    begin
+      rot_right(perm9, 0, j);
+      Dec(k);
+    end;
+    inc(j)
+  end;
+  x := 9; // set tiles 0..8
+  for j := 0 to 17 do
+  begin
+    if a - c_nk(17 - j, x) >= 0 then
+    begin
+      arr[j] := perm9[9 - x];
+      Dec(a, c_nk(17 - j, x));
+      Dec(x);
+    end;
+  end;
+  // Set the remainig tiles
+  x := 9;
+  for j := 0 to 17 do
+    if arr[j] = -1 then
+    begin
+      arr[j] := x;
+      inc(x)
+    end;
+
+end;
 
 procedure initPuzzle(var p: TPuz);
 var
@@ -117,16 +243,89 @@ begin
   end;
 end;
 
+procedure remap(var p, pm: TPuz);
+var
+  i: Integer;
+begin
+  for i := 0 to 17 do
+  begin
+    pm.id[i] := (p.id[(i + 9) mod 18] + 9) mod 18;
+    pm.ori[i] := p.ori[(i + 9) mod 18];
+  end;
+  for i := 0 to 17 do
+  begin
+    p.id[i] := pm.id[i];
+    p.ori[i] := pm.ori[i];
+  end;
+end;
+
+// procedure setPruning(pos, val: Int64);
+/// / 0<=val<4
+// var
+// chunk, offset, offset64, base64: Integer;
+// mask: Int64;
+// begin
+// chunk := pos div 362880;
+// offset := pos mod 362880;
+// base64 := offset div 32; // 32 Positionen pro Int64
+// offset64 := offset mod 32;
+// val := val shl (offset64 * 2);
+// mask := Int64(3);
+// mask := mask shl (offset64 * 2);
+// mask := not mask;
+// pruning9[chunk, base64] := pruning9[chunk, base64] and mask; // zero bits
+// pruning9[chunk, base64] := pruning9[chunk, base64] or val;
+// end;
+
+procedure setPruning(pos: Int64; val: UInt8);
+begin
+  pruning9[pos div 362880, pos mod 362880] := val;
+end;
+
+procedure makePruning;
+var
+  fs: TFileStream;
+var
+  i, j, n: Integer;
+  pz: TPuz;
+  depth: UInt8;
+  done: Int64;
+const
+  fn = 'pruning9';
+begin
+  for i := 0 to 48620 - 1 do
+    Setlength(pruning9[i], 362880); // 362880 = 9!
+  if FileExists(fn) then
+  begin
+    fs := TFileStream.Create(fn, fmOpenRead);
+    for i := 0 to 48620 - 1 do
+      fs.ReadBuffer(pruning9[i], 362880);
+  end
+  else
+  begin
+    for i := 0 to 48620 - 1 do
+    begin
+      for j := 0 to 362880 - 1 do
+        pruning9[i, j] := $FF;
+    end;
+
+    initPuzzle(pz);
+    n := get_9tupel_sorted(pz.id);
+    depth := 0;
+    setPruning(n, depth);
+    done := 1;
+  end;
+end;
+
 procedure TForm1.Button1Click(Sender: TObject);
 var
-  pz: TPuz;
+  pz, pz2: TPuz;
+  i, n: Int64;
 begin
   initPuzzle(pz);
-  move(pz, 0, 0);
-  move(pz, 1, 0);
-  move(pz, 0, 1);
-  move(pz, 1, 1);
+  n := get_9tupel_sorted(pz.id);
 
+  makePruning;
 end;
 
 end.
