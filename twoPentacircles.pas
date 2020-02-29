@@ -293,23 +293,26 @@ begin
   result := Integer(val shr (offset64 * 2));
 end;
 
-procedure makePruning;
+procedure loadPruning;
 var
   fs: TFileStream;
 var
   pz: TPuz;
   depth: UInt8;
   done, doneOld, n, i, j: Int64;
+  bwsearch: Boolean;
 const
   fn = 'pruning9';
+
 begin
   for i := 0 to 48620 - 1 do
-    Setlength(pruning9[i], 11340); // 362880 = 9!/4/8
+    Setlength(pruning9[i], 11340); // 11340 = 9!/4/8
   if FileExists(fn) then
   begin
     fs := TFileStream.Create(fn, fmOpenRead);
     for i := 0 to 48620 - 1 do
-      fs.ReadBuffer(pruning9[i], 11340);
+      fs.ReadBuffer(pruning9[i][0], 11340 * 8);
+    fs.free;
   end
   else
   begin
@@ -322,6 +325,7 @@ begin
     initPuzzle(pz);
     n := get_9tupel_sorted(pz.id);
     depth := 0;
+    bwsearch := false;
     setPruning(n, depth);
     done := 1;
     doneOld := 0;
@@ -331,50 +335,105 @@ begin
       Application.ProcessMessages;
       doneOld := done;
       inc(depth);
+
+      if depth = 27 then
+        bwsearch := true;
+
       for i := 0 to 17643225600 - 1 do
       begin
         if i mod 100000 = 0 then
           Application.ProcessMessages;
-        if getPruning(i) = (depth-1) mod 3 then // occupied
+        if not bwsearch then
         begin
-          set_9tupel_sorted(pz.id, i);
-          move(pz, 0, 0); // rotate disk 0 clockwise
-          n := get_9tupel_sorted(pz.id);
-          if getPruning(n) = 3 then // yet free
+          if getPruning(i) = (depth - 1) mod 3 then // occupied
           begin
-            setPruning(n, depth mod 3);
-            inc(done);
-          end;
-          move(pz, 0, 1); // rotate disk 0 anticlockwise
-          move(pz, 0, 1);
-          n := get_9tupel_sorted(pz.id);
-          if getPruning(n) = 3 then // yet free
-          begin
-            setPruning(n, depth mod 3);
-            inc(done);
-          end;
-          move(pz, 0, 0);
+            set_9tupel_sorted(pz.id, i);
+            move(pz, 0, 0); // rotate disk 0 clockwise
+            n := get_9tupel_sorted(pz.id);
+            if getPruning(n) = 3 then // yet free
+            begin
+              setPruning(n, depth mod 3);
+              inc(done);
+            end;
+            move(pz, 0, 1); // rotate disk 0 anticlockwise
+            move(pz, 0, 1);
+            n := get_9tupel_sorted(pz.id);
+            if getPruning(n) = 3 then // yet free
+            begin
+              setPruning(n, depth mod 3);
+              inc(done);
+            end;
+            move(pz, 0, 0);
 
-          move(pz, 1, 0); // rotate disk 1 clockwise
-          n := get_9tupel_sorted(pz.id);
-          if getPruning(n) = 3 then // yet free
-          begin
-            setPruning(n, depth mod 3);
-            inc(done);
+            move(pz, 1, 0); // rotate disk 1 clockwise
+            n := get_9tupel_sorted(pz.id);
+            if getPruning(n) = 3 then // yet free
+            begin
+              setPruning(n, depth mod 3);
+              inc(done);
+            end;
+            move(pz, 1, 1); // rotate disk 1 anticlockwise
+            move(pz, 1, 1);
+            n := get_9tupel_sorted(pz.id);
+            if getPruning(n) = 3 then // yet free
+            begin
+              setPruning(n, depth mod 3);
+              inc(done);
+            end;
           end;
-          move(pz, 1, 1); // rotate disk 1 anticlockwise
-          move(pz, 1, 1);
-          n := get_9tupel_sorted(pz.id);
-          if getPruning(n) = 3 then // yet free
+        end
+        else
+        begin
+          if getPruning(i) = 3 then // empty, candidate for depth
           begin
-            setPruning(n, depth mod 3);
-            inc(done);
+            set_9tupel_sorted(pz.id, i);
+            move(pz, 0, 0); // rotate disk 0 clockwise
+            n := get_9tupel_sorted(pz.id);
+            if getPruning(n) < 3 then // state already set
+            begin
+              setPruning(i, depth mod 3);
+              inc(done);
+              continue;
+            end;
+            move(pz, 0, 1); // rotate disk 0 anticlockwise
+            move(pz, 0, 1);
+            n := get_9tupel_sorted(pz.id);
+            if getPruning(n) < 3 then // state already set
+            begin
+              setPruning(i, depth mod 3);
+              inc(done);
+              continue;
+            end;
+            move(pz, 0, 0);
+
+            move(pz, 1, 0); // rotate disk 1 clockwise
+            n := get_9tupel_sorted(pz.id);
+            if getPruning(n) < 3 then // state already set
+            begin
+              setPruning(i, depth mod 3);
+              inc(done);
+              continue;
+            end;
+            move(pz, 1, 1); // rotate disk 1 anticlockwise
+            move(pz, 1, 1);
+            n := get_9tupel_sorted(pz.id);
+            if getPruning(n) < 3 then // state already set
+            begin
+              setPruning(i, depth mod 3);
+              inc(done);
+              continue;
+            end;
           end;
         end;
+
       end;
     end;
     Form1.Memo1.Lines.Add(Inttostr(depth) + ': ' + Inttostr(done));
-
+    //fs := TFileStream.Create('F:\!Data\Programmieren\XE8\pentarot\Win64\Debug\test', fmCreate);
+    fs := TFileStream.Create(fn, fmCreate);
+    for i := 0 to  48620 - 1 do
+      fs.WriteBuffer(pruning9[i][0], 11340 * 8);
+    fs.free;
   end;
 end;
 
@@ -383,10 +442,14 @@ var
   pz, pz2: TPuz;
   i, n: Int64;
 begin
+ //ShowMessage('Current directory = '+GetCurrentDir);
   initPuzzle(pz);
   n := get_9tupel_sorted(pz.id);
 
-  makePruning;
+  loadPruning;
+  n := getPruning(17642862720); // solte 0 sein
+  n := getPruning(17642822400); // solte 1 sein
+  n := getPruning(17639919360); // solte 2 sein
 end;
 
 end.
