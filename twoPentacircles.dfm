@@ -22,7 +22,7 @@ object Form1: TForm1
     Width = 75
     Height = 25
     Anchors = [akLeft, akBottom]
-    Caption = 'Button1'
+    Caption = 'Start'
     TabOrder = 0
     OnClick = Button1Click
   end

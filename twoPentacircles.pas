@@ -565,9 +565,25 @@ begin
   end;
 end;
 
+function twist(disk: Integer; var maneuver: array of Integer;
+  length: Integer): Integer;
+var
+  i: Integer;
+begin
+  result := 0;
+  for i := 0 to length - 1 do
+  begin
+    if maneuver[i] = 2 * disk then
+      inc(result);
+    if maneuver[i] = 2 * disk + 1 then
+      Dec(result);
+  end;
+  result := (100 + result) mod 10;
+end;
+
 procedure search(var pz: TPuz; len, togo, prun0, prun1: Integer);
 var
-  n1, n2, i: Int64;
+  tw0, tw1, i: Int64;
   pr: TPuz;
 begin
   if solved then
@@ -576,9 +592,13 @@ begin
   Application.ProcessMessages;
   if max(prun0, prun1) > togo then
     exit;
-  if togo = 0 then
+  if (togo = 0) then
   begin
-    Form1.Memo1.Lines.Add(toString(sofar, len) + ' (' + Inttostr(len) + ')');
+    tw0 := twist(0, sofar, len);
+    tw1 := twist(1, sofar, len);
+
+    Form1.Memo1.Lines.Add(toString(sofar, len) + ' (' + Inttostr(len) + '), ' +
+      'twist: (' + Inttostr(tw0) + ', ' + Inttostr(tw1) + ')');
     Application.ProcessMessages;
     // solved := true;
   end
@@ -659,7 +679,7 @@ end;
 procedure findsolution;
 var
   p, pm: TPuz;
-  a, b, ln, prun0, prun1: Integer;
+  a, b, c, d, ln, prun0, prun1: Integer;
 begin
   initPuzzle(p); // jetzt ggf. Änderungen vornehmen
   // moveN(p, 0);
@@ -669,16 +689,26 @@ begin
   // moveN(p, 3);
   // moveN(p, 1);
 
-  // p.id[0] := 5;  //29
-  // p.id[5] := 0;
+  // a := 1;
+  // b := 2;
+  // c := 10;
+  // d := 11;
+  // p.id[a] := b;
+  // p.id[b] := a;
+  // p.id[c] := d;
+  // p.id[d] := c;
 
-  a := 14;
-  b := 5;
+  a := 0;
+  b := 14;
+  c := 15;
   p.id[a] := b;
-  p.id[b] := a;
+  p.id[b] := c;
+  p.id[c] := a;
 
   solved := false;
-  ln := 1; // WEIL UNGERADE PARITY
+  /// ///////////////!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ln := 0;
+  /// ///////////////!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   prun0 := getTrueDist(p);
   remap(p, pm);
   prun1 := getTrueDist(pm);
