@@ -11,7 +11,9 @@ type
   TForm1 = class(TForm)
     Button1: TButton;
     Memo1: TMemo;
+    Button2: TButton;
     procedure Button1Click(Sender: TObject);
+    procedure Button2Click(Sender: TObject);
   private
     { Private-Deklarationen }
   public
@@ -295,11 +297,11 @@ begin
     pm.id[i] := (p.id[(i + 9) mod 18] + 9) mod 18;
     pm.ori[i] := p.ori[(i + 9) mod 18];
   end;
-  for i := 0 to 17 do
-  begin
-    p.id[i] := pm.id[i];
-    p.ori[i] := pm.ori[i];
-  end;
+  // for i := 0 to 17 do
+  // begin
+  // p.id[i] := pm.id[i];
+  // p.ori[i] := pm.ori[i];
+  // end;
 end;
 
 procedure setPruning(pos, val: Int64);
@@ -479,7 +481,7 @@ begin
   end;
 end;
 
-function getTrueDist(var pz: TPuz): Integer;
+function getTrueDist(pz: TPuz): Integer;
 var
   n, nnew: Integer;
   idx, idx2: Int64;
@@ -527,7 +529,7 @@ begin
   end;
 end;
 
-function toString(var a: array of Integer; len: Integer):String;
+function toString(var a: array of Integer; len: Integer): String;
 var
   i: Integer;
 begin
@@ -547,21 +549,38 @@ begin
   end;
 end;
 
+function getNewPrun(var pz: TPuz; oldPrun: Integer): Integer;
+// compute new pruning value from old pruning value and the new table mod 3 entry
+var
+  n: Integer;
+begin
+  n := getPruning(get_9tupel_sorted(pz.id));
+  case ((n + 3 - oldPrun mod 3)) mod 3 of
+    0:
+      result := oldPrun;
+    1:
+      result := oldPrun + 1;
+    2:
+      result := oldPrun - 1;
+  end;
+end;
 
-procedure search(var pz: TPuz; len, togo: Integer);
+procedure search(var pz: TPuz; len, togo, prun0, prun1: Integer);
 var
   n1, n2, i: Int64;
   pr: TPuz;
 begin
-  n1 := get_9tupel_sorted(pz.id);
-  remap(pz, pr);
-  n2 := get_9tupel_sorted(pr.id);
-  if max(n1, n2) > togo then
+  if solved then
+    exit;
+
+  Application.ProcessMessages;
+  if max(prun0, prun1) > togo then
     exit;
   if togo = 0 then
   begin
-    Form1.Memo1.Lines.Add(toString(sofar,len));
-    solved := true;
+    Form1.Memo1.Lines.Add(toString(sofar, len) + ' (' + Inttostr(len) + ')');
+    Application.ProcessMessages;
+    // solved := true;
   end
   else
   begin
@@ -571,28 +590,36 @@ begin
       begin
         moveN(pz, 0);
         sofar[len - togo] := 0;
-        search(pz,  len, togo - 1);
+
+        remap(pz, pr);
+        search(pz, len, togo - 1, getNewPrun(pz, prun0), getNewPrun(pr, prun1));
         moveN(pz, 1); // undo move
       end;
       if sofar[len - togo - 1] <> 0 then
       begin
         moveN(pz, 1);
         sofar[len - togo] := 1;
-        search(pz,  len, togo - 1);
+
+        remap(pz, pr);
+        search(pz, len, togo - 1, getNewPrun(pz, prun0), getNewPrun(pr, prun1));
         moveN(pz, 0); // undo move
       end;
       if sofar[len - togo - 1] <> 3 then
       begin
         moveN(pz, 2);
         sofar[len - togo] := 2;
-        search(pz,  len, togo - 1);
+
+        remap(pz, pr);
+        search(pz, len, togo - 1, getNewPrun(pz, prun0), getNewPrun(pr, prun1));
         moveN(pz, 3); // undo move
       end;
       if sofar[len - togo - 1] <> 2 then
       begin
         moveN(pz, 3);
         sofar[len - togo] := 3;
-        search(pz,  len, togo - 1);
+
+        remap(pz, pr);
+        search(pz, len, togo - 1, getNewPrun(pz, prun0), getNewPrun(pr, prun1));
         moveN(pz, 2); // undo move
       end;
     end
@@ -600,22 +627,30 @@ begin
     begin
       moveN(pz, 0);
       sofar[len - togo] := 0;
-      search(pz,  len, togo - 1);
+
+      remap(pz, pr);
+      search(pz, len, togo - 1, getNewPrun(pz, prun0), getNewPrun(pr, prun1));
       moveN(pz, 1); // undo move
 
       moveN(pz, 1);
       sofar[len - togo] := 1;
-      search(pz,  len, togo - 1);
+
+      remap(pz, pr);
+      search(pz, len, togo - 1, getNewPrun(pz, prun0), getNewPrun(pr, prun1));
       moveN(pz, 0); // undo move
 
       moveN(pz, 2);
       sofar[len - togo] := 2;
-      search(pz,  len, togo - 1);
+
+      remap(pz, pr);
+      search(pz, len, togo - 1, getNewPrun(pz, prun0), getNewPrun(pr, prun1));
       moveN(pz, 3); // undo move
 
       moveN(pz, 3);
       sofar[len - togo] := 3;
-      search(pz,  len, togo - 1);
+
+      remap(pz, pr);
+      search(pz, len, togo - 1, getNewPrun(pz, prun0), getNewPrun(pr, prun1));
       moveN(pz, 2); // undo move
     end;
   end;
@@ -623,28 +658,56 @@ end;
 
 procedure findsolution;
 var
-  p: TPuz;
-  ln: Integer;
+  p, pm: TPuz;
+  a, b, ln, prun0, prun1: Integer;
 begin
   initPuzzle(p); // jetzt ggf. Änderungen vornehmen
+  // moveN(p, 0);
+  // moveN(p, 0);
+  // moveN(p, 0);
+  // moveN(p, 0);
+  // moveN(p, 3);
+  // moveN(p, 1);
+
+  // p.id[0] := 5;  //29
+  // p.id[5] := 0;
+
+  a := 14;
+  b := 5;
+  p.id[a] := b;
+  p.id[b] := a;
+
   solved := false;
-  ln:=0;
+  ln := 1; // WEIL UNGERADE PARITY
+  prun0 := getTrueDist(p);
+  remap(p, pm);
+  prun1 := getTrueDist(pm);
+  Form1.Memo1.Lines.Add(Inttostr(prun0) + '   ' + Inttostr(prun1));
+
   while not solved do
-       search(p,ln,ln)
+  begin
+    Form1.Memo1.Lines.Add(Inttostr(ln));
+    search(p, ln, ln, prun0, prun1);
+    inc(ln, 2);
+  end;
 end;
-
-
 
 procedure TForm1.Button1Click(Sender: TObject);
 var
   pz: TPuz;
   n: Int64;
 begin
-  //initPuzzle(pz);
-  //n := get_9tupel_sorted(pz.id);
+  // initPuzzle(pz);
+  // n := get_9tupel_sorted(pz.id);
 
   loadPruning;
   findsolution;
+end;
+
+procedure TForm1.Button2Click(Sender: TObject);
+begin
+  solved := true;
+  Memo1.Lines.Add('stopped!')
 end;
 
 end.
